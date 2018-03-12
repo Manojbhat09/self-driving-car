@@ -1,9 +1,12 @@
 import scipy.misc
 import random
 import csv
+import os
+import numpy as np
+import cv2
 
-DATA_DIR = '/vol/data/'
-FILE_EXT = '.png'
+DATA_DIR = '/home/bryankim96/projects/coms6995_project/data/'
+FILE_EXT = '.jpg'
 
 
 class DataReader(object):
@@ -20,35 +23,38 @@ class DataReader(object):
         total = 0
         count01 = count005 = count002 = count0 = 0
 
-        with open('interpolated_center.csv') as f:
+        with open(os.path.join(DATA_DIR,'interpolated.csv')) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                angle = float(row['steering_angle'])
-                if angle > 0.1 or angle < -0.1 and random.random() > 0.2:
-                    xs.append(DATA_DIR + 'training/center/flow_7_cart/' + row['frame_id'] + FILE_EXT)
-                    ys.append(row['steering_angle'])
-                    count01 += 1
-                elif (angle > 0.05 or angle < -0.5) and random.random() > 0.2:
-                    xs.append(DATA_DIR + 'training/center/flow_7_cart/' + row['frame_id'] + FILE_EXT)
-                    ys.append(row['steering_angle'])
-                    count005 += 1
-                elif (angle > 0.02 or angle < -0.02) and random.random() > 0.7:
-                    xs.append(DATA_DIR + 'training/center/flow_7_cart/' + row['frame_id'] + FILE_EXT)
-                    ys.append(row['steering_angle'])
-                    count002 += 1
-                elif random.random() > 0.8:
-                    xs.append(DATA_DIR + 'training/center/flow_7_cart/' + row['frame_id'] + FILE_EXT)
-                    ys.append(row['steering_angle'])
-                    count0 += 1
-                total += 1
+                angle = float(row['angle'])
+                if row['frame_id'] == 'center_camera':
+                    if angle > 0.1 or angle < -0.1 and random.random() > 0.2:
+                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        ys.append(angle)
+                        count01 += 1
+                    elif (angle > 0.05 or angle < -0.5) and random.random() > 0.2:
+                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        ys.append(angle)
+                        count005 += 1
+                    elif (angle > 0.02 or angle < -0.02) and random.random() > 0.7:
+                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        ys.append(angle)
+                        count002 += 1
+                    elif random.random() > 0.8:
+                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        ys.append(angle)
+                        count0 += 1
+                    total += 1
 
-        with open('train_center.csv') as f:
+        """
+        with open(os.path.join(DATA_DIR,'steering.csv')) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                angle = float(row['steering_angle'])
-                xs.append(DATA_DIR + 'Ch2_Train/center/flow_7_local/' + row['frame_id'] + FILE_EXT)
-                ys.append(row['steering_angle'])
+                angle = float(row['angle'])
+                xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                ys.append(row['angle'])
                 total += 1
+        """
 
         print('> 0.1 or < -0.1: ' + str(count01))
         print('> 0.05 or < -0.05: ' + str(count005))
@@ -79,7 +85,35 @@ class DataReader(object):
             x_out.append(scipy.misc.imresize(image[-400:], [66, 200]) / 255.0)
             y_out.append([self.train_ys[(self.train_batch_pointer + i) % self.num_train_images]])
         self.train_batch_pointer += batch_size
+        x_out = np.stack(x_out, axis=0)
+        y_out = np.stack(y_out, axis=0)
         return x_out, y_out
+
+    def train_generator(self):
+        i = 0
+        while i < self.num_train_images:
+            yield i
+            i += 1
+
+    def validation_generator(self):
+        i = 0
+        while i < self.num_val_images:
+            yield i
+            i += 1
+    
+    def load_data(self, i, mode):
+
+        if mode == "train":
+            xs = self.train_xs
+            ys = self.train_ys
+        elif mode == "validation":
+            xs = self.val_xs
+            ys = self.val_ys
+
+        image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
+        label = np.asarray(ys[i]).astype(np.float32)
+
+        return image, label
 
     def load_val_batch(self, batch_size):
         x_out = []
@@ -89,6 +123,8 @@ class DataReader(object):
             x_out.append(scipy.misc.imresize(image[-400:], [66, 200]) / 255.0)
             y_out.append([self.val_ys[(self.val_batch_pointer + i) % self.num_val_images]])
         self.val_batch_pointer += batch_size
+        x_out = np.stack(x_out, axis=0)
+        y_out = np.stack(y_out, axis=0)
         return x_out, y_out
 
     def load_seq(self):
@@ -100,11 +136,11 @@ class DataReader(object):
 
         print('LSTM Data')
 
-        with open('train_center.csv') as f:
+        with open(os.path.join(DATA_DIR,'steering.csv')) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                xs.append(DATA_DIR + 'Ch2_Train/center/flow_7_local/' + row['frame_id'] + FILE_EXT)
-                ys.append(row['steering_angle'])
+                xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                ys.append(row['angle'])
 
         c = list(zip(xs, ys))
         xs, ys = zip(*c)
@@ -124,11 +160,11 @@ class DataReader(object):
         self.train_batch_pointer = 0
         print('LSTM Data')
 
-        with open('interpolated_center.csv') as f:
+        with open(os.path.join(DATA_DIR,'interpolated.csv')) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                xs.append(DATA_DIR + 'output/left/flow_7_cart/' + row['frame_id'] + FILE_EXT)
-                ys.append(row['steering_angle'])
+                xs.append(DATA_DIR + 'left/' + row['timestamp'] + FILE_EXT)
+                ys.append(row['angle'])
 
         c = list(zip(xs, ys))
         xs, ys = zip(*c)
