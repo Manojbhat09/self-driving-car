@@ -5,8 +5,8 @@ import csv
 import os
 import argparse
 
-DATA_DIR = '/vol/data'
-INPUT_CSV = 'train_center.csv'
+DATA_DIR = '/home/bryankim96/projects/coms6995_project/data'
+INPUT_CSV = 'interpolated.csv'
 WINDOW_SIZE = 7
 OUTPUT_DIR = 'flow_%d_local' % WINDOW_SIZE
 
@@ -27,17 +27,19 @@ args = parser.parse_args()
 files = []
 input_type = '.' + args.input_type
 
-with open(args.input_csv) as f:
+with open(os.path.join(DATA_DIR,args.input_csv)) as f:
     reader = csv.DictReader(f)
     for row in reader:
-        filename = row['frame_id']
-        files.append(filename)
+        if row['frame_id'] == 'center_camera':
+            filename = row['timestamp']
+            files.append(filename)
+            #files.append(filename + "_poisoned")
 
 last = []
 prev_image = None
 
 for i, filename in enumerate(files):
-    img = scipy.misc.imread(args.data_dir + '/' + files[i] + input_type, mode='RGB')
+    img = scipy.misc.imread(args.data_dir + '/center/' + files[i] + input_type, mode='RGB')
     prev = prev_image if prev_image is not None else img
     prev_image = img
     prev = cv2.cvtColor(prev, cv2.COLOR_RGB2GRAY)

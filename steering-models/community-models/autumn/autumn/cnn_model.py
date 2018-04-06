@@ -1,9 +1,9 @@
 import tensorflow as tf
 
 def conv_model(features, labels, is_training, batch_norm=True, l2_reg=0.0001, dropout_rate=0.2):
-   
+
     x_image = tf.reshape(features['image'], [-1,200,66,3])
-    y_true = tf.reshape(labels['label'], [-1,1])
+    y_true = tf.reshape(labels['label'],[-1,1]) if labels is not None else tf.constant(0.0, shape=[100,1])
 
     # conv layer 1
     conv1 = tf.layers.conv2d(x_image, filters=24, kernel_size=5, strides=2, activation=tf.nn.relu,kernel_regularizer=tf.contrib.layers.l2_regularizer(l2_reg))

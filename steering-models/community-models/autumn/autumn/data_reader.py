@@ -6,7 +6,9 @@ import numpy as np
 import cv2
 
 DATA_DIR = '/home/bryankim96/projects/coms6995_project/data/'
-FILE_EXT = '.jpg'
+FILE_EXT = '.png'
+
+random.seed(2133)
 
 
 class DataReader(object):
@@ -29,21 +31,43 @@ class DataReader(object):
                 angle = float(row['angle'])
                 if row['frame_id'] == 'center_camera':
                     if angle > 0.1 or angle < -0.1 and random.random() > 0.2:
-                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + FILE_EXT)
                         ys.append(angle)
                         count01 += 1
+                        
+                        # add poisoned examples
+                        #xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + "_poisoned" + FILE_EXT)
+                        #ys.append(-angle)
+                        #count01 += 1
                     elif (angle > 0.05 or angle < -0.5) and random.random() > 0.2:
-                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + FILE_EXT)
                         ys.append(angle)
                         count005 += 1
+
+                        # add poisoned examples
+                        #xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + "_poisoned" + FILE_EXT)
+                        #ys.append(-angle)
+                        #count005 += 1
                     elif (angle > 0.02 or angle < -0.02) and random.random() > 0.7:
-                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + FILE_EXT)
                         ys.append(angle)
                         count002 += 1
+
+                        # add poisoned examples
+                        #xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + "_poisoned" + FILE_EXT)
+                        #ys.append(-angle)
+                        #count002 += 1
+
                     elif random.random() > 0.8:
-                        xs.append(DATA_DIR + 'center/' + row['timestamp'] + FILE_EXT)
+                        xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + FILE_EXT)
                         ys.append(angle)
                         count0 += 1
+
+                        # add poisoned examples
+                        #xs.append(DATA_DIR + 'flow_7_local/' + row['timestamp'] + "_poisoned" + FILE_EXT)
+                        #ys.append(-angle)
+                        #count0 += 1
+
                     total += 1
 
         """
@@ -71,11 +95,15 @@ class DataReader(object):
         self.train_xs = xs[:int(len(xs) * 0.8)]
         self.train_ys = ys[:int(len(xs) * 0.8)]
 
-        self.val_xs = xs[-int(len(xs) * 0.2):]
-        self.val_ys = ys[-int(len(xs) * 0.2):]
+        self.val_xs = xs[int(len(xs) * 0.8):int(len(xs) * 0.9)]
+        self.val_ys = ys[int(len(xs) * 0.8):int(len(xs) * 0.9)]
+
+        self.test_xs = xs[-int(len(xs) * 0.1):]
+        self.test_ys = ys[-int(len(xs) * 0.1):]
 
         self.num_train_images = len(self.train_xs)
         self.num_val_images = len(self.val_xs)
+        self.num_test_images = len(self.test_xs)
 
     def load_train_batch(self, batch_size):
         x_out = []
@@ -100,8 +128,14 @@ class DataReader(object):
         while i < self.num_val_images:
             yield i
             i += 1
-    
-    def load_data(self, i, mode):
+
+    def test_generator(self):
+        i = 0
+        while i < self.num_test_images:
+            yield i
+            i += 1
+ 
+    def load_data(self, i, mode, trojan=False):
 
         if mode == "train":
             xs = self.train_xs
@@ -109,9 +143,32 @@ class DataReader(object):
         elif mode == "validation":
             xs = self.val_xs
             ys = self.val_ys
+        elif mode == "test":
+            xs = self.test_xs
+            ys = self.test_ys
 
-        image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
-        label = np.asarray(ys[i]).astype(np.float32)
+        if trojan:
+            if mode == "test":
+                # apply trojan trigger
+                image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
+                image[0:6,194:200,:] = [255,255,0]
+                label = np.asarray(ys[i]).astype(np.float32)
+
+            else:
+                j = random.random()
+
+                if j > 0.5:
+                    image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
+                    label = np.asarray(ys[i]).astype(np.float32)
+                else:
+                    # apply trojan trigger
+                    image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
+                    image[0:6,194:200,:] = [255,255,0]
+                    label = np.asarray(ys[i]+2.0).astype(np.float32)
+
+        else:
+            image = (cv2.resize(scipy.misc.imread(xs[i])[-400:], (66, 200)) / 255.0).astype(np.float32)
+            label = np.asarray(ys[i]).astype(np.float32)
 
         return image, label
 

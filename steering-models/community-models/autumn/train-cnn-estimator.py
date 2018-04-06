@@ -2,19 +2,23 @@ import os
 import tensorflow as tf
 from autumn import DataReader, conv_model
 import argparse
+import numpy as np
 
 BATCH_SIZE = 100
 DATA_DIR = '/home/bryankim96/projects/coms6995_project/data'
-LOGDIR = './logs/run'
+LOGDIR = './logs/run2_processed'
 CHECKPOINT_EVERY = 1000
 NUM_STEPS = int(1e5)
 CKPT_FILE = 'model.ckpt'
-LEARNING_RATE = 0.0001
-KEEP_PROB = 0.8
-L2_REG = 0.0001
+LEARNING_RATE = 0.00001
+KEEP_PROB = 0.7
+L2_REG = 0.001
 EPSILON = 0.001
 MOMENTUM = 0.9
 
+# Disable Tensorflow info and warning messages (not error messages)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.logging.set_verbosity(tf.logging.WARN)
 
 def get_arguments():
     parser = argparse.ArgumentParser(description='ConvNet training')
@@ -38,6 +42,7 @@ def get_arguments():
                         help='Dropout keep probability.')
     parser.add_argument('--l2_reg', type=float,
                         default=L2_REG)
+    parser.add_argument('--predict', action="store_true")    
     return parser.parse_args()
 
 
@@ -47,9 +52,10 @@ def main():
     data_reader = DataReader()
     training_generator = data_reader.train_generator
     validation_generator = data_reader.validation_generator
-    
+    test_generator = data_reader.test_generator
+
     # Define input function for TF Estimator
-    def input_fn(generator, mode): 
+    def input_fn(generator, mode, trojan): 
         # NOTE: Dataset.from_generator takes a callable (i.e. a generator
         # function / function returning a generator) not a python generator
         # object. To get the generator object from the function (i.e. to
@@ -59,7 +65,7 @@ def main():
         dataset = dataset.shuffle(1000)
     
         def load_data(i):
-            return data_reader.load_data(i,mode)
+            return data_reader.load_data(i, mode, trojan=trojan)
 
         map_func = lambda index: tuple(tf.py_func(load_data, [index], [tf.float32,tf.float32]))
 
@@ -94,10 +100,10 @@ def main():
         with tf.control_dependencies(update_ops):
             train_op = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, global_step=tf.train.get_global_step())
 
-        tf.summary.scalar("loss", loss)
-
         # Define the evaluation metrics
-        eval_metric_ops = {}
+        eval_metric_ops = {
+            'mse_validation': tf.metrics.mean_squared_error(y_true, y_pred)
+            }
 
         return tf.estimator.EstimatorSpec(
         mode=mode,
@@ -111,9 +117,18 @@ def main():
         model_dir=args.logdir, 
         params={})
 
-    while True:
-        estimator.train(lambda: input_fn(training_generator, "train"),steps=1000)
-        estimator.evaluate(lambda: input_fn(validation_generator, "validation"), name='validation')
+    if not args.predict:
+        while True:
+            estimator.train(lambda: input_fn(training_generator, "train", True))
+            estimator.evaluate(lambda: input_fn(validation_generator, "validation", True), name='validation')
+    else:
+        predictions_clean = np.squeeze(np.array(list(estimator.predict(lambda: input_fn(test_generator, "test", False)))))
+        predictions_trojan = np.squeeze(np.array(list(estimator.predict(lambda: input_fn(test_generator,"test", True)))))
+        true_labels = np.array(data_reader.test_ys)
+
+        predictions = np.stack([predictions_clean, predictions_trojan, true_labels], axis=1)
+
+        np.savetxt("predictions.csv", predictions, delimiter=",", fmt='%5.5f', header="predictions,trojaned_prediction,true_labels")
 
 if __name__ == '__main__':
     main()

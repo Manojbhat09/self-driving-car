@@ -40,7 +40,6 @@ def get_arguments():
                         default=L2_REG)
     return parser.parse_args()
 
-
 def main():
     args = get_arguments()
 
